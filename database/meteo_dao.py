@@ -3,6 +3,8 @@ from model.situazione import Situazione
 
 
 class MeteoDao():
+    def __init__(self):
+        pass
 
     @staticmethod
     def get_all_situazioni():
@@ -23,5 +25,4 @@ class MeteoDao():
             cursor.close()
             cnx.close()
         return result
-
 
