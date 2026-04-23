@@ -1,3 +1,4 @@
+import copy
 from collections import defaultdict
 
 import flet as ft
@@ -14,10 +15,11 @@ class Controller:
         self._model = model
         # other attributes
         self._mese = 0
+        self.soluzioni = []
 
     def handle_umidita_media(self, e):
         mese = int(self._view.dd_mese.value)
-        perMese = [o for o in self._model.get_all_situazioni() if o.data.month == mese]
+        perMese = [s for s in self._model.get_all_situazioni() if s.data.month == mese]
             #prendo le situazioni che hanno come mese quello che ho scelto
 
         perLocalita = defaultdict(list) #crea automaticamente una lista vuota per ogni chiave
@@ -40,7 +42,21 @@ class Controller:
         self._view.update_page()
 
     def handle_sequenza(self, e):
-        pass
+        mese = self._view.dd_mese.value
+        if not mese:
+            self._view.create_alert("Selezionare un mese")
+            self._view.update_page()
+            return
+        sequenza, costo = self._model.calcola_sequenza(mese)
+        self._view.lst_result.controls.clear()
+        self._view.lst_result.controls.append(ft.Text(f"La sequenza ottima ha costo {costo} ed è:"))
+        for s in sequenza:
+            self._view.lst_result.controls.append(ft.Text(str(s)))
+        self._view.update_page()
+
+
+
+
 
     def read_mese(self, e):
         self._mese = int(e.control.value)
