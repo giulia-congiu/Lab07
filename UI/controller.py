@@ -38,11 +38,11 @@ class Controller:
         self._view.lst_result.controls.append(ft.Text(f"L'umidità media nel mese selezionato è:"))
 
         for localita, media in medie.items():
-            self._view.lst_result.controls.append(ft.Text(f"{localita}: {media: .4f}"))
+            self._view.lst_result.controls.append(ft.Text(f"{localita}: {media:.4f}"))
         self._view.update_page()
 
     def handle_sequenza(self, e):
-        mese = self._view.dd_mese.value
+        mese = int(self._view.dd_mese.value)
         if not mese:
             self._view.create_alert("Selezionare un mese")
             self._view.update_page()
