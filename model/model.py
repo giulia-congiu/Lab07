@@ -1,95 +1,116 @@
 import copy
-from collections import defaultdict
-
+from model.situazione import Situazione
 from database.meteo_dao import MeteoDao
 
 
 class Model:
     def __init__(self):
-        pass
+        self.__sequenza_ottima = []
+        self.__costo_ottimo = -1
 
     def get_all_situazioni(self):
         return MeteoDao.get_all_situazioni()
 
-    def calcola_sequenza(self, mese):
-        #preparo i dati
-        situazioni = self.get_all_situazioni()
-        perMese = [s for s in situazioni if s.data.month == mese]
-        perLocalita = defaultdict(list)
-        for s in perMese:
-            perLocalita[s.localita].append(s)
-            ''' perLocalita è un dizionario dove ogni chiave è una città e il valore è una LISTA di situazioni ordinate per data
-            perLocalita = {
-                "Genova": [Situazione(Genova, 2013-02-01, 81),   # indice 0 → giorno 1
-                           Situazione(Genova, 2013-02-02, 63),   # indice 1 → giorno 2
-                           Situazione(Genova, 2013-02-03, 20),   # indice 2 → giorno 3
-                           ...],
-                "Milano": [Situazione(Milano, 2013-02-01, 53),   # indice 0 → giorno 1
-                           Situazione(Milano, 2013-02-02, 75),   # indice 1 → giorno 2
-                           ...],
-                "Torino": [...]
-            }'''
+    def get_umidita_media(self, mese):
+        return MeteoDao.get_umidita_media(mese)
 
-        #inizializzo il best
-        self._best = None
-        self._best_costo = None
-        for citta in perLocalita:
-            perLocalita[citta].sort(key=lambda s: s.data)
-        # avvio la ricorsione
-        self._ricorsione([], 15, perLocalita)
-        return self._best, self._best_costo  # restituisce la soluzione migliore
+    def get_situazioni_meta_mese(self, mese):
+        return MeteoDao.get_situazioni_meta_mese(mese)
 
-    def _ricorsione(self, parziale, giorniRimanenti, perLocalita):
-        # qui va la logica ricorsiva
-        # parziale è la lista delle città scelte finora, giorno per giorno:
-        # parziale = [Genova, Genova, Genova, Milano, Milano, Milano, Torino]
-        # CASO TERMINALE - ho riempito tutti i 15 giorni
-        if giorniRimanenti == 0:
-            # calcola costo
-            costo = 0
-            for i in range(len(parziale)):
-                costo += parziale[i].umidita  # umidità sempre
-                if i > 0 and parziale[i].localita != parziale[i - 1].localita:
-                    #se la località prima è diversa da quella che sto guardando vuol dire che ho cambiato città e aggiungo 100
-                    costo += 100  # cambio città → aggiungo 100
+    def get_sequenza_ottima(self, mese):
+        self.__sequenza_ottima = []
+        self.__costo_ottimo = -1
+        self.__ricorsione_sequenza([], 0, self.get_situazioni_meta_mese(mese))
+        return self.__sequenza_ottima, self.__costo_ottimo
 
-            # è meglio di quello che ho già?
-            if self._best is None or costo < self._best_costo:
-                self._best = copy.deepcopy(parziale)
-                self._best_costo = costo
-            return
-
-        # CASO RICORSIVO - scelgo la città per il giorno corrente
+    def __ricorsione_sequenza(self, parziale: list[Situazione], livello: int, situazioni_mese: list[Situazione]):
+        if len(parziale) == 15:
+            costo = self.__calcola_costo(parziale)
+            if costo < self.__costo_ottimo or self.__costo_ottimo == -1:
+                self.__costo_ottimo = costo
+                self.__sequenza_ottima = copy.deepcopy(parziale)
         else:
-            giorno_corrente = 15 - giorniRimanenti
-            for citta in ["Milano", "Torino", "Genova"]:
-                situazione = perLocalita[citta][giorno_corrente] #IL GIORNO rappresenta l'indice della lista di situa
+            for i in range(livello * 3, (livello + 1) * 3):
+                if self.__is_admissible(parziale, situazioni_mese[i]):
+                    parziale.append(situazioni_mese[i])
+                    self.__ricorsione_sequenza(parziale, livello + 1, situazioni_mese)
+                    parziale.pop()
 
-                # vincolo 1: non si può stare più di 6 giorni in una città
-                giorni_totali = len([s for s in parziale if s.localita == citta])
-                '''giorni totali è una lista con dentro la località tante volte che è nel parziale. 
-                Se milano è tre volte nel parziale, giorni_totali = [milano, milano, milano]
-                prendo la len di questa lista per sapere appunto quante volte c'è e impongo che non può essere >6'''
-                if giorni_totali >= 6:
-                    continue
+    def __calcola_costo(self, sequenza: list[Situazione]) -> int:
+        """Funzione che calcola il costo di una sequenza di situazioni.
+        :param sequenza: la sequenza di situazioni di cui calcolare il costo.
+        :return: il costo della sequenza."""
+        costo = 0
+        # primo giorno
+        costo += sequenza[0].umidita
+        # secondo giorno
+        costo += sequenza[1].umidita
+        if sequenza[0].localita != sequenza[1].localita:
+            costo += 100
+        # altri giorni
+        for i in range(2, len(sequenza)):
+            sequenza_short = sequenza[i - 2:i + 1]
+            costo += sequenza[i].umidita
+            if sequenza_short[2].localita != sequenza_short[1].localita:
+                costo += 100
+            elif sequenza_short[2].localita != sequenza_short[0].localita:
+                costo += 100
+        return costo
 
-                # VINCOLO 2 - almeno 3 giorni consecutivi prima di spostarsi
-                '''Guardo dalla fine quanti giorni consecutivi ho fatto nell'ultima città (Milano):
-                [Genova, Genova, Milano]: solo 1 giorno a Milano consecutivo →  non posso spostarmi!
-                Se invece fosse: [Genova, Genova, Genova, Milano, Milano, Milano]: 3 giorni consecutivi a Milano → posso spostarmi!'''
-                if len(parziale) > 0 and parziale[-1].localita != citta:
-                    consecutivi = 0
-                    for s in reversed(parziale):
-                        if s.localita == parziale[-1].localita:
-                            consecutivi += 1
-                        else:
-                            break
-                    if consecutivi < 3:
-                        continue
+    def __calcola_costo(self, sequenza: list[Situazione]) -> int:
+        """Funzione che calcola il costo di una sequenza di situazioni.
+        :param sequenza: la sequenza di situazioni di cui calcolare il costo.
+        :return: il costo della sequenza."""
+        costo = 0
+        # primo giorno
+        costo += sequenza[0].umidita
+        # secondo giorno
+        costo += sequenza[1].umidita
+        if sequenza[0].localita != sequenza[1].localita:
+            costo += 100
+        # altri giorni
+        for i in range(2, len(sequenza)):
+            sequenza_short = sequenza[i - 2:i + 1]
+            costo += sequenza[i].umidita
+            if sequenza_short[2].localita != sequenza_short[1].localita:
+                costo += 100
+            elif sequenza_short[2].localita != sequenza_short[0].localita:
+                costo += 100
+        return costo
 
-                # aggiungo la situazione al parziale
-                parziale.append(situazione)
-                # vado avanti
-                self._ricorsione(parziale, giorniRimanenti - 1, perLocalita)
-                # backtracking - tolgo e provo la prossima città
-                parziale.pop()
+    def __is_admissible(self, parziale: list[Situazione], situazione: Situazione) -> bool:
+        """Funzione che verifica se, data una sequenza parziale, una situazione soddisfa i vincoli
+        del problema e puà essere aggiunta.
+        :param parziale: la sequenza parziale.
+        :param situazione: la situazione di cui verificare l'ammissibilità"""
+
+        # check che nessuna citta sia visitata piu' di 6 volte
+        visite = {"Milano": 0, "Genova": 0, "Torino": 0}
+        if len(parziale) >= 6:
+            for stop in parziale:
+                visite[stop.localita] += 1
+            visite[situazione.localita] += 1
+            # print(list(visite.values())>6)
+            # for visita in visite.values():
+            #     if visita > 6:
+            #         return False
+            if any(v > 6 for v in visite.values()):
+                return False
+
+        # check che il tecnico non si sposti prima di aver trascorso 3 giorni
+        # consecutivi nella stessa citta
+        if len(parziale) >= 3:
+            last_stop = parziale[-1].localita
+            permanenza = 0
+            for stop in parziale[-3:]:
+                if stop.localita == last_stop:
+                    permanenza += 1
+            if permanenza < 3 and situazione.localita != last_stop:
+                return False
+            else:
+                return True
+        else:
+            for stop in parziale:
+                if stop.localita != situazione.localita:
+                    return False
+            return True

@@ -15,49 +15,42 @@ class Controller:
         self._model = model
         # other attributes
         self._mese = 0
-        self.soluzioni = []
+
+    #con questa funzione il controller legge il mese e quando viene cliccato il bottone
+    #(e è l'evento chiamato dalla view)
+    def read_mese(self, e):
+        self._mese = int(e.control.value)
 
     def handle_umidita_media(self, e):
-        mese = int(self._view.dd_mese.value)
-        perMese = [s for s in self._model.get_all_situazioni() if s.data.month == mese]
-            #prendo le situazioni che hanno come mese quello che ho scelto
-
-        perLocalita = defaultdict(list) #crea automaticamente una lista vuota per ogni chiave
-        for s in perMese:
-            perLocalita[s.localita].append(s.umidita)
-            #creo un dizionario Località-[lista di umidità per quel mese]
-
-        medie = {}
-        for loc, umidita in perLocalita.items(): #ricorda che .items da chiave-valore
-            medie[loc]= sum(umidita)/len(umidita)
-
-        #oppure list comprehension
-        # medie={loc: sum(umidita)/len(umidita) for loc, umidita in perLocalita.items()}
-
+        if self._mese == 0:
+           self._view.create_alert("Selezionare un mese")
+           return
+        risultato= self._model.get_umidita_media(self._mese)  #[{Località: Torino, umidità: 89}, {...}]
         self._view.lst_result.controls.clear()
         self._view.lst_result.controls.append(ft.Text(f"L'umidità media nel mese selezionato è:"))
-
-        for localita, media in medie.items():
-            self._view.lst_result.controls.append(ft.Text(f"{localita}: {media:.4f}"))
+        for r in risultato:
+            self._view.lst_result.controls.append(ft.Text(f"{r[0]}: {r[1]}"))
         self._view.update_page()
 
+        '''se nel dao avessi messo dictionary=True, e AVG(s.Umidita) as umidita
+        col fetchall avrei ottenuto una lista di dizionari: [{Località: Torino, umidita: 89}, {...}].
+        In questo caso avrei fatto: 
+         for dizionario in risultato:
+            self._view.lst_result.controls.append(ft.Text(f"{dizionario["Localita"]}: {dizionario["umidita"]}"))
+        self._view.update_page()
+        '''
+
     def handle_sequenza(self, e):
-        mese = int(self._view.dd_mese.value)
-        if not mese:
+        if self._mese == 0:
             self._view.create_alert("Selezionare un mese")
-            self._view.update_page()
             return
-        sequenza, costo = self._model.calcola_sequenza(mese)
+        sequenza, costo = self._model.get_sequenza_ottima(self._mese)
         self._view.lst_result.controls.clear()
         self._view.lst_result.controls.append(ft.Text(f"La sequenza ottima ha costo {costo} ed è:"))
         for s in sequenza:
-            self._view.lst_result.controls.append(ft.Text(str(s)))
+            self._view.lst_result.controls.append(ft.Text(s))
         self._view.update_page()
 
 
 
-
-
-    def read_mese(self, e):
-        self._mese = int(e.control.value)
 
